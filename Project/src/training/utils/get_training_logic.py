@@ -10,7 +10,7 @@ import numpy as np
 
 from src.data_pipeline.preprocessing.preprocessing import preprocessing
 from src.training.utils.get_loss_function import get_loss_function
-from src.training.utils.get_lr_scheduler import get_lr_scheduler
+from src.training.utils.get_lr_scheduler import get_lr_scheduler, get_current_lr
 from src.training.utils.get_model import get_model
 from src.training.utils.get_optimizer import get_optimizer
 from src.training.utils.mixed_precision import get_mixed_precision
@@ -52,7 +52,7 @@ def evaluate_model(model, loss_function, test_loader, device, epoch, writer):
 
     wandb.log({"val_loss": avg_loss, "val_acc": accuracy})
     
-    return accuracy
+    return avg_loss, accuracy
 
 
 def initialize_training(config, config_wb):
@@ -206,7 +206,7 @@ class PseudoLabeledDataset(torch.utils.data.Dataset):
 
 
 def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_function, 
-                          optimizer, scheduler, scaler, device, writer, epoch, 
+                          optimizer, scheduler, scaler, device, writer, epoch, config,
                           lambda_u=1.0, drop_rate=0.0):
     """
     Train one epoch with noise injection (Noisy Student approach).
@@ -320,7 +320,10 @@ def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_functio
             
             train_loss += loss.item()
     
-    scheduler.step()
+    # Update learning rate with warmup support
+    current_lr = get_current_lr(epoch, optimizer, scheduler, config)
+    writer.add_scalar("Train/LearningRate", current_lr, epoch)
+    wandb.log({"learning_rate": current_lr})
     
     # Reset dropout
     if drop_rate > 0:
@@ -400,9 +403,16 @@ def baseline_training_logic(config, config_wb):
 
             train_loss += loss.item()
 
-        scheduler.step()
+        # Update learning rate with warmup support
+        current_lr = get_current_lr(epoch, optimizer, scheduler, config)
+        writer.add_scalar("Train/LearningRate", current_lr, epoch)
+        wandb.log({"learning_rate": current_lr})
 
-        accuracy = evaluate_model(model, loss_function, test_loader, device, epoch, writer)
+        avg_loss, accuracy = evaluate_model(model, loss_function, test_loader, device, epoch, writer)
+        
+        # Step ReduceLROnPlateau with validation loss if needed
+        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(avg_loss)
 
         best_acc = save_checkpoint_if_best(model, accuracy, best_acc, experiment_number)
 
@@ -491,10 +501,15 @@ def noisy_student_training_logic(config, config_wb):
                 train_loss = train_epoch_with_noise(
                     teacher_model, labeled_loader, None, loss_function,
                     teacher_optimizer, teacher_scheduler, scaler, device,
-                    writer, epoch, lambda_u=0.0, drop_rate=0.0
+                    writer, epoch, config, lambda_u=0.0, drop_rate=0.0
                 )
                 
-                accuracy = evaluate_model(teacher_model, loss_function, test_loader, device, epoch, writer)
+                avg_loss, accuracy = evaluate_model(teacher_model, loss_function, test_loader, device, epoch, writer)
+                
+                # Step ReduceLROnPlateau with validation loss if needed
+                if isinstance(teacher_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    teacher_scheduler.step(avg_loss)
+                
                 best_acc = save_checkpoint_if_best(teacher_model, accuracy, best_acc, experiment_number)
         
         # Step 2: Generate pseudo-labels for unlabeled data
@@ -540,10 +555,15 @@ def noisy_student_training_logic(config, config_wb):
             train_loss = train_epoch_with_noise(
                 student_model, labeled_loader, pseudo_loader, loss_function,
                 student_optimizer, student_scheduler, scaler, device,
-                writer, epoch, lambda_u=lambda_u, drop_rate=drop_rate
+                writer, epoch, config, lambda_u=lambda_u, drop_rate=drop_rate
             )
             
-            accuracy = evaluate_model(student_model, loss_function, test_loader, device, epoch, writer)
+            avg_loss, accuracy = evaluate_model(student_model, loss_function, test_loader, device, epoch, writer)
+            
+            # Step ReduceLROnPlateau with validation loss if needed
+            if isinstance(student_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                student_scheduler.step(avg_loss)
+            
             best_acc = save_checkpoint_if_best(student_model, accuracy, best_acc, experiment_number)
         
         # Step 4: Student becomes teacher for next iteration

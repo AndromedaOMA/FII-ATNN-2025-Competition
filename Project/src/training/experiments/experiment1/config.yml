@@ -22,7 +22,7 @@ model:
 training:
   epochs: 5
   milestones: [60, 120, 160]
-  learning_rate: 0.001
+  learning_rate: 0.0001
   optimizer: "SGD"  # SGD, Adam, AdamW, Muon, SAM
   momentum: 0.9
   weight_decay: 5e-4
@@ -37,6 +37,8 @@ training:
   T_0: 781  # Number of iterations for the first restart (for CosineAnnealingWarmRestarts, ~1 epoch for CIFAR100 with batch_size=64)
   T_mult: 2  # A factor increases T_i after a restart (for CosineAnnealingWarmRestarts)
   eta_min: 1e-6  # Minimum learning rate (for CosineAnnealingWarmRestarts)
+  warmup_epochs: 5  # Number of epochs for learning rate warmup (linear warmup from warmup_initial_lr to learning_rate)
+  warmup_initial_lr: 0.0  # Initial learning rate for warmup (default: 0.0)
   loss_function: "CrossEntropyLoss"
   resume: False
 
