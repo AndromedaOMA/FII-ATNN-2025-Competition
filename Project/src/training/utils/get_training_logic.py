@@ -139,7 +139,8 @@ def initialize_training(config, config_wb):
             - 'scaler': mixed precision scaler
             - 'writer': TensorBoard SummaryWriter
     """
-    run = wandb.init(project="ACNN-project")
+    # Reuse existing wandb run if already initialized (e.g., by wandb.agent)
+    run = wandb.init(project="ACNN-project", resume="allow")
     
     device = config['experiment']['device']
     experiment_number = config['experiment']['number']

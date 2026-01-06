@@ -1,4 +1,5 @@
 import sys
+import argparse
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -27,9 +28,17 @@ def create_sweep_train_function(config):
         """
         Wrapper function for wandb sweeps that uses the training logic from get_training_logic.
         """
+        # Initialize wandb run first (this must be called before accessing wandb.config)
+        wandb.init(project="ACNN-project")
+        
         config_wb = wandb.config
         
-        training_logic_name = config.get('training', {}).get('logic', 'baseline')
+        # Get training logic from sweep config if available, otherwise from main config
+        if hasattr(config_wb, 'training_logic'):
+            training_logic_name = config_wb.training_logic
+        else:
+            training_logic_name = config.get('training', {}).get('logic', 'baseline')
+        
         training_logic = get_training_logic(training_logic_name)
         
         training_logic(config, config_wb)
@@ -38,8 +47,17 @@ def create_sweep_train_function(config):
 
 
 if __name__ == '__main__':
-    print("Type the number of the experiment you want to run:")
-    experiment_number = int(input())
+    parser = argparse.ArgumentParser(description='Start a wandb sweep')
+    parser.add_argument('--experiment', '-e', type=int, default=None,
+                        help='Experiment number (if not provided, will prompt)')
+    args = parser.parse_args()
+    
+    if args.experiment is None:
+        print("Type the number of the experiment you want to run:")
+        experiment_number = int(input())
+    else:
+        experiment_number = args.experiment
+    
     config = load_config(f"../experiments/experiment{experiment_number}/config.yml")
 
     pprint.pprint(f"Sweep configuration: {config['sweep']}")
