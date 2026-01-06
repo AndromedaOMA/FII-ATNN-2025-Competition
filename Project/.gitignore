@@ -1,0 +1,5 @@
+/data/
+/src/training/scripts/wandb
+
+src/training/experiments/**/checkpoints/
+src/training/experiments/**/results/
