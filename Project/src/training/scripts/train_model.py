@@ -9,8 +9,10 @@ import wandb
 
 wandb.login()
 
-from src.training.utils.load_config import load_config
-from src.training.utils.get_training_logic import get_training_logic
+from Project.src.training.utils.load_config import load_config
+from Project.src.training.utils.get_training_logic import get_training_logic
+# from src.training.utils.load_config import load_config
+# from src.training.utils.get_training_logic import get_training_logic
 
 
 def create_sweep_train_function(config):
@@ -27,12 +29,10 @@ def create_sweep_train_function(config):
         """
         Wrapper function for wandb sweeps that uses the training logic from get_training_logic.
         """
-        config_wb = wandb.config
-        
         training_logic_name = config.get('training', {}).get('logic', 'baseline')
         training_logic = get_training_logic(training_logic_name)
         
-        training_logic(config, config_wb)
+        training_logic(config)
     
     return sweep_train
 
