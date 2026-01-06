@@ -149,6 +149,10 @@ def initialize_training(config, config_wb):
     config['training']['weight_decay'] = config_wb.weight_decay
     config['dataset']['batch_size'] = config_wb.batch_size
     config['training']['optimizer'] = config_wb.optimizer
+    if hasattr(config_wb, 'dropout'):
+        config['model']['drop_rate'] = config_wb.dropout
+    if hasattr(config_wb, 'warmup_epochs'):
+        config['training']['warmup_epochs'] = config_wb.warmup_epochs
 
     train_loader, test_loader = preprocessing(config)
     model = get_model(config['model']['name'], config).to(device)

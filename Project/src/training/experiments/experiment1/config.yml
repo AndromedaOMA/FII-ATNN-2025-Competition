@@ -20,7 +20,7 @@ model:
   pretrained: True
 
 training:
-  epochs: 5
+  epochs: 30
   milestones: [60, 120, 160]
   learning_rate: 0.0001
   optimizer: "AdamW"  # SGD, Adam, AdamW, Muon, SAM
@@ -62,24 +62,26 @@ logging:
   save_epoch: 10
 
 sweep:
-  method: bayes
+  method: grid
   metric:
     name: val_acc
     goal: maximize
 
   parameters:
     learning_rate:
-      distribution: uniform
-      min: 1e-4
-      max: 3e-3
+      values: [2e-4, 5e-4, 1e-3, 2e-3, 5e-3]
 
     batch_size:
-      values: [32, 64, 128]
+      values: [128, 256, 512]
 
     weight_decay:
-      distribution: uniform
-      min: 0.0
-      max: 0.005
+      values: [0.0, 0.0001, 0.0005, 0.001]
+
+    dropout:
+      values: [0.0, 0.05, 0.1, 0.15, 0.2]
+
+    warmup_epochs:
+      values: [3, 5, 7, 10]
 
     optimizer:
-      values: ["SGD"]
+      values: ["AdamW"]

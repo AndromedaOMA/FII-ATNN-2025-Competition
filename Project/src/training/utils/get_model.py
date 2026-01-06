@@ -23,12 +23,14 @@ def get_model(name, config):
         print('Model resnest26d.gluon_in1k loaded!')
         return model
     elif name == 'efficientnet_b0' or name == 'efficientnetb0':
+        drop_rate = config.get('model', {}).get('drop_rate', 0.0)
         model = timm.create_model(
             "efficientnet_b0", 
             pretrained=config['model']['pretrained'],
-            num_classes=config['model']['num_classes']
+            num_classes=config['model']['num_classes'],
+            drop_rate=drop_rate
         )
-        print('Model efficientnet_b0 loaded!')
+        print(f'Model efficientnet_b0 loaded with drop_rate={drop_rate}!')
         return model
     elif name == 'MLP':
         pass
