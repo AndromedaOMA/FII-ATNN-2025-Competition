@@ -58,6 +58,38 @@ class SimpleCachedDataset(Dataset):
         return self.data[i]
 
 
+def create_cutmix_mixup_collate_fn(cutmix_alpha=0.5, mixup_alpha=0.5):
+    """
+    Create a collate function that applies CutMix and MixUp at batch level.
+    
+    Args:
+        cutmix_alpha: Alpha parameter for CutMix (0.0 = no CutMix)
+        mixup_alpha: Alpha parameter for MixUp (0.0 = no MixUp)
+    
+    Returns:
+        Collate function for DataLoader
+    """
+    # Create CutMix and MixUp transforms once (they are stateless)
+    cutmix = v2.CutMix(alpha=cutmix_alpha) if cutmix_alpha > 0 else None
+    mixup = v2.MixUp(alpha=mixup_alpha) if mixup_alpha > 0 else None
+    
+    def collate_fn(batch):
+        images = torch.stack([item[0] for item in batch])
+        labels = torch.tensor([item[1] for item in batch], dtype=torch.long)
+        
+        # Apply CutMix if enabled
+        if cutmix is not None:
+            images, labels = cutmix(images, labels)
+        
+        # Apply MixUp if enabled
+        if mixup is not None:
+            images, labels = mixup(images, labels)
+        
+        return images, labels
+    
+    return collate_fn
+
+
 def preprocessing(config):
     if config['dataset']['name'] == 'MNIST':
         train_transformer = transforms.Compose([
@@ -125,13 +157,23 @@ def preprocessing(config):
         mean = list(map(float, config["dataset"]["mean"]))
         std = list(map(float, config["dataset"]["std"]))
         
+        # Get augmentation parameters from config
+        cutmix_alpha = config.get('augmentation', {}).get('cutmix_alpha', 0.5)
+        mixup_alpha = config.get('augmentation', {}).get('mixup_alpha', 0.5)
+        randaugment_num_ops = config.get('augmentation', {}).get('randaugment_num_ops', 2)
+        randaugment_magnitude = config.get('augmentation', {}).get('randaugment_magnitude', 9)
+        
+        # Training transforms with RandAugment (per-sample augmentation)
         train_transformer = v2.Compose([
             v2.ToImage(),
+            v2.Resize((224, 224), antialias=True),
+            v2.RandAugment(num_ops=randaugment_num_ops, magnitude=randaugment_magnitude),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean, std, inplace=True)
         ])
         test_transformer = v2.Compose([
             v2.ToImage(),
+            v2.Resize((224, 224), antialias=True),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean, std, inplace=True)
         ])
@@ -154,12 +196,16 @@ def preprocessing(config):
         train_dataset = SimpleCachedDataset(train_dataset)
         test_dataset = SimpleCachedDataset(test_dataset)
         
+        # Create collate function for CutMix/MixUp (batch-level augmentation)
+        train_collate_fn = create_cutmix_mixup_collate_fn(cutmix_alpha, mixup_alpha)
+        
         pin_memory = config.get('dataset', {}).get('pin_memory', True)
         train_loader = DataLoader(
             train_dataset, 
             batch_size=config['dataset']['batch_size'], 
             shuffle=True, 
-            pin_memory=pin_memory
+            pin_memory=pin_memory,
+            collate_fn=train_collate_fn
         )
         test_loader = DataLoader(
             test_dataset, 

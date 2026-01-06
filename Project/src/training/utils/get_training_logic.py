@@ -16,6 +16,68 @@ from src.training.utils.get_optimizer import get_optimizer
 from src.training.utils.mixed_precision import get_mixed_precision
 
 
+class EarlyStopping:
+    """
+    Early stopping utility to stop training when a metric stops improving.
+    
+    Args:
+        patience: Number of epochs to wait after last improvement before stopping
+        min_delta: Minimum change to qualify as an improvement
+        mode: 'max' for metrics to maximize (e.g., accuracy), 'min' for metrics to minimize (e.g., loss)
+        restore_best: Whether to restore the best model state when stopping
+    """
+    def __init__(self, patience=7, min_delta=0.0, mode='max', restore_best=True):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.restore_best = restore_best
+        self.counter = 0
+        self.best_score = None
+        self.best_state = None
+        self.early_stop = False
+        
+    def __call__(self, score, model):
+        """
+        Check if training should stop based on the current score.
+        
+        Args:
+            score: Current metric value (e.g., accuracy or loss)
+            model: Model to potentially save/restore state
+        
+        Returns:
+            bool: True if training should stop, False otherwise
+        """
+        if self.best_score is None:
+            self.best_score = score
+            if self.restore_best:
+                self.best_state = model.state_dict().copy()
+        elif self._is_better(score, self.best_score):
+            self.best_score = score
+            self.counter = 0
+            if self.restore_best:
+                self.best_state = model.state_dict().copy()
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+                if self.restore_best and self.best_state is not None:
+                    model.load_state_dict(self.best_state)
+                    print(f"Early stopping: Restored best model with score {self.best_score:.4f}")
+        
+        return self.early_stop
+    
+    def _is_better(self, current, best):
+        """Check if current score is better than best score."""
+        if self.mode == 'max':
+            return current > best + self.min_delta
+        else:  # mode == 'min'
+            return current < best - self.min_delta
+    
+    def get_best_score(self):
+        """Get the best score seen so far."""
+        return self.best_score
+
+
 def evaluate_model(model, loss_function, test_loader, device, epoch, writer):
     """
     Evaluate a model on the test dataset.
@@ -375,6 +437,17 @@ def baseline_training_logic(config, config_wb):
     writer = components['writer']
 
     best_acc = 0
+    
+    # Initialize early stopping if enabled
+    early_stopping = None
+    if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
+        patience = config['training']['early_stopping'].get('patience', 7)
+        min_delta = config['training']['early_stopping'].get('min_delta', 0.0)
+        mode = config['training']['early_stopping'].get('mode', 'max')  # 'max' for accuracy, 'min' for loss
+        restore_best = config['training']['early_stopping'].get('restore_best', True)
+        early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
+        print(f"Early stopping enabled: patience={patience}, mode={mode}, min_delta={min_delta}")
+    
     for epoch in range(1, config['training']['epochs'] + 1):
         # Training phase
         model.train()
@@ -415,6 +488,16 @@ def baseline_training_logic(config, config_wb):
             scheduler.step(avg_loss)
 
         best_acc = save_checkpoint_if_best(model, accuracy, best_acc, experiment_number)
+        
+        # Check early stopping
+        if early_stopping is not None:
+            # Use accuracy for early stopping (mode='max') or loss (mode='min')
+            metric = accuracy if early_stopping.mode == 'max' else avg_loss
+            if early_stopping(metric, model):
+                print(f"Early stopping triggered at epoch {epoch}")
+                print(f"Best {early_stopping.mode} score: {early_stopping.get_best_score():.4f}")
+                wandb.log({"early_stopped": True, "early_stop_epoch": epoch})
+                break
 
     finalize_training(writer, run)
 
@@ -497,6 +580,15 @@ def noisy_student_training_logic(config, config_wb):
             
             teacher_epochs = config.get('noisy_student', {}).get('teacher_epochs', config['training']['epochs'])
             
+            # Initialize early stopping for teacher if enabled
+            teacher_early_stopping = None
+            if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
+                patience = config['training']['early_stopping'].get('patience', 7)
+                min_delta = config['training']['early_stopping'].get('min_delta', 0.0)
+                mode = config['training']['early_stopping'].get('mode', 'max')
+                restore_best = config['training']['early_stopping'].get('restore_best', True)
+                teacher_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
+            
             for epoch in range(1, teacher_epochs + 1):
                 train_loss = train_epoch_with_noise(
                     teacher_model, labeled_loader, None, loss_function,
@@ -511,6 +603,13 @@ def noisy_student_training_logic(config, config_wb):
                     teacher_scheduler.step(avg_loss)
                 
                 best_acc = save_checkpoint_if_best(teacher_model, accuracy, best_acc, experiment_number)
+                
+                # Check early stopping for teacher
+                if teacher_early_stopping is not None:
+                    metric = accuracy if teacher_early_stopping.mode == 'max' else avg_loss
+                    if teacher_early_stopping(metric, teacher_model):
+                        print(f"Early stopping triggered for teacher at epoch {epoch}")
+                        break
         
         # Step 2: Generate pseudo-labels for unlabeled data
         print("Generating pseudo-labels for unlabeled data...")
@@ -551,6 +650,15 @@ def noisy_student_training_logic(config, config_wb):
         
         student_epochs = config.get('noisy_student', {}).get('student_epochs', config['training']['epochs'])
         
+        # Initialize early stopping for student if enabled
+        student_early_stopping = None
+        if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
+            patience = config['training']['early_stopping'].get('patience', 7)
+            min_delta = config['training']['early_stopping'].get('min_delta', 0.0)
+            mode = config['training']['early_stopping'].get('mode', 'max')
+            restore_best = config['training']['early_stopping'].get('restore_best', True)
+            student_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
+        
         for epoch in range(1, student_epochs + 1):
             train_loss = train_epoch_with_noise(
                 student_model, labeled_loader, pseudo_loader, loss_function,
@@ -565,6 +673,13 @@ def noisy_student_training_logic(config, config_wb):
                 student_scheduler.step(avg_loss)
             
             best_acc = save_checkpoint_if_best(student_model, accuracy, best_acc, experiment_number)
+            
+            # Check early stopping for student
+            if student_early_stopping is not None:
+                metric = accuracy if student_early_stopping.mode == 'max' else avg_loss
+                if student_early_stopping(metric, student_model):
+                    print(f"Early stopping triggered for student at epoch {epoch}")
+                    break
         
         # Step 4: Student becomes teacher for next iteration
         teacher_model = student_model

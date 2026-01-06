@@ -6,7 +6,7 @@ experiment:
 
 dataset:
   name: "CIFAR100-N"       # Options: MNIST, CIFAR10, CIFAR100, CIFAR100-N, OxfordIIITPet
-  batch_size: 64
+  batch_size: 256
   num_workers: 4
   data_dir: "../../../../data/fii-atnn-2024-project-noisy-cifar-100"
   mean: [0.485, 0.456, 0.406]
@@ -23,7 +23,7 @@ training:
   epochs: 5
   milestones: [60, 120, 160]
   learning_rate: 0.0001
-  optimizer: "SGD"  # SGD, Adam, AdamW, Muon, SAM
+  optimizer: "AdamW"  # SGD, Adam, AdamW, Muon, SAM
   momentum: 0.9
   weight_decay: 5e-4
   scheduler: "CosineAnnealingWarmRestarts"  # stepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
@@ -42,6 +42,18 @@ training:
   loss_function: "CrossEntropyLoss"
   label_smoothing: 0.1  # Label smoothing factor (0.0 = no smoothing, typical values: 0.1-0.2)
   resume: False
+  early_stopping:
+    enabled: True  # Enable early stopping
+    patience: 5  # Number of epochs to wait after last improvement before stopping
+    min_delta: 0.001  # Minimum change to qualify as an improvement (0.001 = 0.1% for accuracy)
+    mode: "max"  # "max" for metrics to maximize (e.g., accuracy), "min" for metrics to minimize (e.g., loss)
+    restore_best: True  # Whether to restore the best model state when stopping
+
+augmentation:
+  cutmix_alpha: 0.5  # CutMix alpha parameter (0.0 = disabled, typical: 0.5-1.0)
+  mixup_alpha: 0.5  # MixUp alpha parameter (0.0 = disabled, typical: 0.5-1.0)
+  randaugment_num_ops: 1  # Number of augmentation operations in RandAugment (typical: 2-3)
+  randaugment_magnitude: 9  # Magnitude of RandAugment operations (typical: 5-15)
 
 logging:
   checkpoint_dir: "./checkpoints"
