@@ -40,6 +40,7 @@ training:
   warmup_epochs: 5  # Number of epochs for learning rate warmup (linear warmup from warmup_initial_lr to learning_rate)
   warmup_initial_lr: 0.0  # Initial learning rate for warmup (default: 0.0)
   loss_function: "CrossEntropyLoss"
+  label_smoothing: 0.1  # Label smoothing factor (0.0 = no smoothing, typical values: 0.1-0.2)
   resume: False
 
 logging:

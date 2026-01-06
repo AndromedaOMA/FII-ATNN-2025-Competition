@@ -90,7 +90,7 @@ def initialize_training(config, config_wb):
 
     train_loader, test_loader = preprocessing(config)
     model = get_model(config['model']['name'], config).to(device)
-    loss_function = get_loss_function(config["training"]["loss_function"])
+    loss_function = get_loss_function(config["training"]["loss_function"], config)
     optimizer = get_optimizer(config, model.parameters())
     scheduler = get_lr_scheduler(config, optimizer)
     scaler = get_mixed_precision()
