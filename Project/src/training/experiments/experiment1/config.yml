@@ -9,8 +9,8 @@ dataset:
   batch_size: 64
   num_workers: 4
   data_dir: "../../../../data/fii-atnn-2024-project-noisy-cifar-100"
-  mean: [0.5070751592371323, 0.48654887331495095, 0.4409178433670343]
-  std: [0.2673342858792401, 0.2564384629170883, 0.27615047132568404]
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
 
 model:
   name: "EfficientNetB0"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
@@ -26,7 +26,7 @@ training:
   optimizer: "SGD"  # SGD, Adam, AdamW, Muon, SAM
   momentum: 0.9
   weight_decay: 5e-4
-  scheduler: "stepLR"  # stepLR, ReduceLROnPlateau
+  scheduler: "CosineAnnealingWarmRestarts"  # stepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
   step_size: 10
   gamma: 0.1
   mode: "min"
@@ -34,6 +34,9 @@ training:
   factor: 0.3
   patience: 3
   threshold: 0.09
+  T_0: 781  # Number of iterations for the first restart (for CosineAnnealingWarmRestarts, ~1 epoch for CIFAR100 with batch_size=64)
+  T_mult: 2  # A factor increases T_i after a restart (for CosineAnnealingWarmRestarts)
+  eta_min: 1e-6  # Minimum learning rate (for CosineAnnealingWarmRestarts)
   loss_function: "CrossEntropyLoss"
   resume: False
 
