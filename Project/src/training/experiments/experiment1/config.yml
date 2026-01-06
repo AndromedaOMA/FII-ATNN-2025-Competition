@@ -5,15 +5,15 @@ experiment:
   date_format: '%A_%d_%B_%Y_%Hh_%Mm_%Ss'
 
 dataset:
-  name: "CIFAR100"       # Options: MNIST, CIFAR10, CIFAR100, OxfordIIITPet
+  name: "CIFAR100-N"       # Options: MNIST, CIFAR10, CIFAR100, CIFAR100-N, OxfordIIITPet
   batch_size: 64
   num_workers: 4
-  data_dir: "../../../data/CIFAR100"
+  data_dir: "../../../../data/fii-atnn-2024-project-noisy-cifar-100"
   mean: [0.5070751592371323, 0.48654887331495095, 0.4409178433670343]
   std: [0.2673342858792401, 0.2564384629170883, 0.27615047132568404]
 
 model:
-  name: "ResNet50"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
+  name: "EfficientNetB0"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
   input_dim: 784         # Used only for MLP
   hidden_dim: 256
   num_classes: 100

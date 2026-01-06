@@ -22,6 +22,14 @@ def get_model(name, config):
         model = timm.create_model("hf_hub:timm/resnest26d.gluon_in1k", pretrained=config['model']['pretrained'])
         print('Model resnest26d.gluon_in1k loaded!')
         return model
+    elif name == 'efficientnet_b0' or name == 'efficientnetb0':
+        model = timm.create_model(
+            "efficientnet_b0", 
+            pretrained=config['model']['pretrained'],
+            num_classes=config['model']['num_classes']
+        )
+        print('Model efficientnet_b0 loaded!')
+        return model
     elif name == 'MLP':
         pass
     else:
