@@ -58,7 +58,7 @@ class SimpleCachedDataset(Dataset):
         return self.data[i]
 
 
-def create_cutmix_mixup_collate_fn(cutmix_alpha=0.5, mixup_alpha=0.5):
+def create_cutmix_mixup_collate_fn(num_classes, cutmix_alpha=0.5, mixup_alpha=0.5):
     """
     Create a collate function that applies CutMix and MixUp at batch level.
     
@@ -70,8 +70,8 @@ def create_cutmix_mixup_collate_fn(cutmix_alpha=0.5, mixup_alpha=0.5):
         Collate function for DataLoader
     """
     # Create CutMix and MixUp transforms once (they are stateless)
-    cutmix = v2.CutMix(alpha=cutmix_alpha) if cutmix_alpha > 0 else None
-    mixup = v2.MixUp(alpha=mixup_alpha) if mixup_alpha > 0 else None
+    cutmix = v2.CutMix(alpha=cutmix_alpha, num_classes=num_classes) if cutmix_alpha > 0 else None
+    mixup = v2.MixUp(alpha=mixup_alpha, num_classes=num_classes) if mixup_alpha > 0 else None
     
     def collate_fn(batch):
         images = torch.stack([item[0] for item in batch])
@@ -154,6 +154,8 @@ def preprocessing(config):
         return train_loader, test_loader
 
     elif config['dataset']['name'] == 'CIFAR100-N':
+        num_classes = 100
+
         mean = list(map(float, config["dataset"]["mean"]))
         std = list(map(float, config["dataset"]["std"]))
         
@@ -197,7 +199,7 @@ def preprocessing(config):
         test_dataset = SimpleCachedDataset(test_dataset)
         
         # Create collate function for CutMix/MixUp (batch-level augmentation)
-        train_collate_fn = create_cutmix_mixup_collate_fn(cutmix_alpha, mixup_alpha)
+        train_collate_fn = create_cutmix_mixup_collate_fn(num_classes, cutmix_alpha, mixup_alpha)
         
         pin_memory = config.get('dataset', {}).get('pin_memory', True)
         train_loader = DataLoader(

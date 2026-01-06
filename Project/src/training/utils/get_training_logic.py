@@ -1,5 +1,8 @@
 import os
 from tqdm import tqdm
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset, ConcatDataset
@@ -8,12 +11,20 @@ from datetime import datetime
 import wandb
 import numpy as np
 
-from src.data_pipeline.preprocessing.preprocessing import preprocessing
-from src.training.utils.get_loss_function import get_loss_function
-from src.training.utils.get_lr_scheduler import get_lr_scheduler, get_current_lr
-from src.training.utils.get_model import get_model
-from src.training.utils.get_optimizer import get_optimizer
-from src.training.utils.mixed_precision import get_mixed_precision
+from Project.src.data_pipeline.preprocessing.preprocessing import preprocessing
+from Project.src.training.utils.get_loss_function import get_loss_function
+from Project.src.training.utils.get_lr_scheduler import get_lr_scheduler, get_current_lr
+from Project.src.training.utils.get_model import get_model
+from Project.src.training.utils.get_optimizer import get_optimizer
+from Project.src.training.utils.mixed_precision import get_mixed_precision
+
+
+# from src.data_pipeline.preprocessing.preprocessing import preprocessing
+# from src.training.utils.get_loss_function import get_loss_function
+# from src.training.utils.get_lr_scheduler import get_lr_scheduler, get_current_lr
+# from src.training.utils.get_model import get_model
+# from src.training.utils.get_optimizer import get_optimizer
+# from src.training.utils.mixed_precision import get_mixed_precision
 
 
 class EarlyStopping:
@@ -26,6 +37,7 @@ class EarlyStopping:
         mode: 'max' for metrics to maximize (e.g., accuracy), 'min' for metrics to minimize (e.g., loss)
         restore_best: Whether to restore the best model state when stopping
     """
+
     def __init__(self, patience=7, min_delta=0.0, mode='max', restore_best=True):
         self.patience = patience
         self.min_delta = min_delta
@@ -35,7 +47,7 @@ class EarlyStopping:
         self.best_score = None
         self.best_state = None
         self.early_stop = False
-        
+
     def __call__(self, score, model):
         """
         Check if training should stop based on the current score.
@@ -63,16 +75,16 @@ class EarlyStopping:
                 if self.restore_best and self.best_state is not None:
                     model.load_state_dict(self.best_state)
                     print(f"Early stopping: Restored best model with score {self.best_score:.4f}")
-        
+
         return self.early_stop
-    
+
     def _is_better(self, current, best):
         """Check if current score is better than best score."""
         if self.mode == 'max':
             return current > best + self.min_delta
         else:  # mode == 'min'
             return current < best - self.min_delta
-    
+
     def get_best_score(self):
         """Get the best score seen so far."""
         return self.best_score
@@ -113,18 +125,18 @@ def evaluate_model(model, loss_function, test_loader, device, epoch, writer):
     writer.add_scalar("Test/Accuracy", accuracy, epoch)
 
     wandb.log({"val_loss": avg_loss, "val_acc": accuracy})
-    
+
     return avg_loss, accuracy
 
 
-def initialize_training(config, config_wb):
+def initialize_training(config):
     """
     Initialize common training components.
     
     Args:
         config: Main configuration dictionary
         config_wb: Wandb config object with sweep hyperparameters
-    
+
     Returns:
         dict: Dictionary containing initialized components:
             - 'run': wandb run object
@@ -139,9 +151,10 @@ def initialize_training(config, config_wb):
             - 'scaler': mixed precision scaler
             - 'writer': TensorBoard SummaryWriter
     """
-    # Reuse existing wandb run if already initialized (e.g., by wandb.agent)
     run = wandb.init(project="ACNN-project", resume="allow")
-    
+
+    config_wb = wandb.config
+
     device = config['experiment']['device']
     experiment_number = config['experiment']['number']
 
@@ -168,7 +181,7 @@ def initialize_training(config, config_wb):
     writer = SummaryWriter(
         os.path.join(log_dir, datetime.now().strftime(config["experiment"]["date_format"]))
     )
-    
+
     return {
         'run': run,
         'device': device,
@@ -235,46 +248,47 @@ def generate_pseudo_labels(model, unlabeled_loader, device, confidence_threshold
     model.eval()
     pseudo_data = []
     pseudo_targets = []
-    
+
     with torch.no_grad():
         for images, _ in tqdm(unlabeled_loader, desc="Generating pseudo-labels"):
             images = images.to(device)
             outputs = model(images)
             probs = torch.softmax(outputs, dim=1)
             confidences, predicted = torch.max(probs, dim=1)
-            
+
             # Filter by confidence threshold
             mask = confidences >= confidence_threshold
             if mask.any():
                 pseudo_data.append(images[mask].cpu())
                 pseudo_targets.append(predicted[mask].cpu())
-    
+
     if pseudo_data:
         pseudo_data = torch.cat(pseudo_data, dim=0)
         pseudo_targets = torch.cat(pseudo_targets, dim=0)
     else:
         pseudo_data = torch.empty(0)
         pseudo_targets = torch.empty(0, dtype=torch.long)
-    
+
     return pseudo_data, pseudo_targets
 
 
 class PseudoLabeledDataset(torch.utils.data.Dataset):
     """Dataset wrapper for pseudo-labeled data."""
+
     def __init__(self, data, targets):
         self.data = data
         self.targets = targets
-    
+
     def __len__(self):
         return len(self.targets)
-    
+
     def __getitem__(self, idx):
         return self.data[idx], self.targets[idx]
 
 
-def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_function, 
-                          optimizer, scheduler, scaler, device, writer, epoch, config,
-                          lambda_u=1.0, drop_rate=0.0):
+def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_function,
+                           optimizer, scheduler, scaler, device, writer, epoch, config,
+                           lambda_u=1.0, drop_rate=0.0):
     """
     Train one epoch with noise injection (Noisy Student approach).
     
@@ -296,24 +310,24 @@ def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_functio
         float: Average training loss
     """
     model.train()
-    
+
     # Enable dropout for additional noise
     if drop_rate > 0:
         for module in model.modules():
             if isinstance(module, nn.Dropout):
                 module.p = drop_rate
-    
+
     train_loss = 0.0
     n_iter = 0
-    
+
     # Combine labeled and unlabeled loaders
     if unlabeled_loader is not None:
         # Use zip to iterate over both loaders
         labeled_iter = iter(labeled_loader)
         unlabeled_iter = iter(unlabeled_loader)
-        
+
         max_iter = max(len(labeled_loader), len(unlabeled_loader))
-        
+
         for batch_idx in range(max_iter):
             # Get labeled batch
             try:
@@ -321,83 +335,83 @@ def train_epoch_with_noise(model, labeled_loader, unlabeled_loader, loss_functio
             except StopIteration:
                 labeled_iter = iter(labeled_loader)
                 labeled_images, labeled_targets = next(labeled_iter)
-            
+
             # Get unlabeled batch
             try:
                 unlabeled_images, unlabeled_targets = next(unlabeled_iter)
             except StopIteration:
                 unlabeled_iter = iter(unlabeled_loader)
                 unlabeled_images, unlabeled_targets = next(unlabeled_iter)
-            
+
             labeled_images = labeled_images.to(device)
             labeled_targets = labeled_targets.to(device)
             unlabeled_images = unlabeled_images.to(device)
             unlabeled_targets = unlabeled_targets.to(device)
-            
+
             optimizer.zero_grad()
-            
+
             with torch.amp.autocast(device_type='cuda'):
                 # Labeled loss
                 labeled_outputs = model(labeled_images)
                 labeled_loss = loss_function(labeled_outputs, labeled_targets)
-                
+
                 # Unlabeled loss (pseudo-labels)
                 unlabeled_outputs = model(unlabeled_images)
                 unlabeled_loss = loss_function(unlabeled_outputs, unlabeled_targets)
-                
+
                 # Combined loss
                 loss = labeled_loss + lambda_u * unlabeled_loss
-            
+
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
-            
+
             n_iter = (epoch - 1) * max_iter + batch_idx + 1
             writer.add_scalar("Train/Loss", loss.item(), n_iter)
             writer.add_scalar("Train/LabeledLoss", labeled_loss.item(), n_iter)
             writer.add_scalar("Train/UnlabeledLoss", unlabeled_loss.item(), n_iter)
-            
+
             wandb.log({
                 "train_loss": loss.item(),
                 "train_labeled_loss": labeled_loss.item(),
                 "train_unlabeled_loss": unlabeled_loss.item()
             })
-            
+
             train_loss += loss.item()
     else:
         # Only labeled data
         for batch_idx, (images, targets) in enumerate(labeled_loader):
             images = images.to(device)
             targets = targets.to(device)
-            
+
             optimizer.zero_grad()
             with torch.amp.autocast(device_type='cuda'):
                 outputs = model(images)
                 loss = loss_function(outputs, targets)
-            
+
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
-            
+
             n_iter = (epoch - 1) * len(labeled_loader) + batch_idx + 1
             writer.add_scalar("Train/Loss", loss.item(), n_iter)
             wandb.log({"train_loss": loss.item()})
-            
+
             train_loss += loss.item()
-    
+
     # Update learning rate with warmup support
     current_lr = get_current_lr(epoch, optimizer, scheduler, config)
     writer.add_scalar("Train/LearningRate", current_lr, epoch)
     wandb.log({"learning_rate": current_lr})
-    
+
     # Reset dropout
     if drop_rate > 0:
         for module in model.modules():
             if isinstance(module, nn.Dropout):
                 module.p = 0.0
-    
+
     return train_loss / max(len(labeled_loader), len(unlabeled_loader) if unlabeled_loader else len(labeled_loader))
 
 
@@ -420,15 +434,14 @@ def get_training_logic(name):
         raise ValueError(f"Unknown training logic: {name}")
 
 
-def baseline_training_logic(config, config_wb):
+def baseline_training_logic(config):
     """
     Baseline training logic: standard supervised training with mixed precision.
     
     Args:
         config: Main configuration dictionary
-        config_wb: Wandb config object with sweep hyperparameters
     """
-    components = initialize_training(config, config_wb)
+    components = initialize_training(config)
     run = components['run']
     device = components['device']
     experiment_number = components['experiment_number']
@@ -442,7 +455,7 @@ def baseline_training_logic(config, config_wb):
     writer = components['writer']
 
     best_acc = 0
-    
+
     # Initialize early stopping if enabled
     early_stopping = None
     if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
@@ -452,14 +465,14 @@ def baseline_training_logic(config, config_wb):
         restore_best = config['training']['early_stopping'].get('restore_best', True)
         early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
         print(f"Early stopping enabled: patience={patience}, mode={mode}, min_delta={min_delta}")
-    
+
     for epoch in range(1, config['training']['epochs'] + 1):
         # Training phase
         model.train()
         train_loss = 0.0
 
         for batch_index, (train_images, train_labels) in enumerate(
-            tqdm(train_loader, desc=f"Epoch {epoch}")
+                tqdm(train_loader, desc=f"Epoch {epoch}")
         ):
             train_images, train_labels = train_images.to(device), train_labels.to(device)
 
@@ -487,13 +500,13 @@ def baseline_training_logic(config, config_wb):
         wandb.log({"learning_rate": current_lr})
 
         avg_loss, accuracy = evaluate_model(model, loss_function, test_loader, device, epoch, writer)
-        
+
         # Step ReduceLROnPlateau with validation loss if needed
         if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
             scheduler.step(avg_loss)
 
         best_acc = save_checkpoint_if_best(model, accuracy, best_acc, experiment_number)
-        
+
         # Check early stopping
         if early_stopping is not None:
             # Use accuracy for early stopping (mode='max') or loss (mode='min')
@@ -507,7 +520,7 @@ def baseline_training_logic(config, config_wb):
     finalize_training(writer, run)
 
 
-def noisy_student_training_logic(config, config_wb):
+def noisy_student_training_logic(config):
     """
     Noisy Student training logic: semi-supervised learning with teacher-student approach.
     
@@ -519,10 +532,9 @@ def noisy_student_training_logic(config, config_wb):
     
     Args:
         config: Main configuration dictionary
-        config_wb: Wandb config object with sweep hyperparameters
     """
     # Use common initialization logic
-    components = initialize_training(config, config_wb)
+    components = initialize_training(config)
     run = components['run']
     device = components['device']
     experiment_number = components['experiment_number']
@@ -530,11 +542,11 @@ def noisy_student_training_logic(config, config_wb):
     loss_function = components['loss_function']
     scaler = components['scaler']
     writer = components['writer']
-    
+
     # Get the train dataset from the train_loader (we'll split it ourselves)
     train_loader = components['train_loader']
     train_dataset = train_loader.dataset
-    
+
     # Get Noisy Student specific parameters
     labeled_ratio = config.get('noisy_student', {}).get('labeled_ratio', 0.1)  # 10% labeled by default
     num_iterations = config.get('noisy_student', {}).get('num_iterations', 1)  # Number of teacher-student iterations
@@ -542,17 +554,17 @@ def noisy_student_training_logic(config, config_wb):
     drop_rate = config.get('noisy_student', {}).get('drop_rate', 0.1)  # Additional dropout noise
     confidence_threshold = config.get('noisy_student', {}).get('confidence_threshold', 0.0)
     student_larger = config.get('noisy_student', {}).get('student_larger', False)  # Use larger student model
-    
+
     # Split into labeled and unlabeled subsets
     dataset_size = len(train_dataset)
     labeled_size = int(dataset_size * labeled_ratio)
     indices = np.random.permutation(dataset_size)
     labeled_indices = indices[:labeled_size]
     unlabeled_indices = indices[labeled_size:]
-    
+
     labeled_dataset = Subset(train_dataset, labeled_indices)
     unlabeled_dataset = Subset(train_dataset, unlabeled_indices)
-    
+
     labeled_loader = DataLoader(
         labeled_dataset,
         batch_size=config['dataset']['batch_size'],
@@ -565,16 +577,16 @@ def noisy_student_training_logic(config, config_wb):
         shuffle=True,
         pin_memory=True
     )
-    
+
     # Teacher-Student iterations
     teacher_model = None
     best_acc = 0
-    
+
     for iteration in range(num_iterations):
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"Noisy Student Iteration {iteration + 1}/{num_iterations}")
-        print(f"{'='*50}")
-        
+        print(f"{'=' * 50}")
+
         # Step 1: Train teacher model (or use previous student as teacher)
         if teacher_model is None:
             # First iteration: train teacher on labeled data only
@@ -582,9 +594,9 @@ def noisy_student_training_logic(config, config_wb):
             teacher_model = get_model(config['model']['name'], config).to(device)
             teacher_optimizer = get_optimizer(config, teacher_model.parameters())
             teacher_scheduler = get_lr_scheduler(config, teacher_optimizer)
-            
+
             teacher_epochs = config.get('noisy_student', {}).get('teacher_epochs', config['training']['epochs'])
-            
+
             # Initialize early stopping for teacher if enabled
             teacher_early_stopping = None
             if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
@@ -592,40 +604,41 @@ def noisy_student_training_logic(config, config_wb):
                 min_delta = config['training']['early_stopping'].get('min_delta', 0.0)
                 mode = config['training']['early_stopping'].get('mode', 'max')
                 restore_best = config['training']['early_stopping'].get('restore_best', True)
-                teacher_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
-            
+                teacher_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode,
+                                                       restore_best=restore_best)
+
             for epoch in range(1, teacher_epochs + 1):
                 train_loss = train_epoch_with_noise(
                     teacher_model, labeled_loader, None, loss_function,
                     teacher_optimizer, teacher_scheduler, scaler, device,
                     writer, epoch, config, lambda_u=0.0, drop_rate=0.0
                 )
-                
+
                 avg_loss, accuracy = evaluate_model(teacher_model, loss_function, test_loader, device, epoch, writer)
-                
+
                 # Step ReduceLROnPlateau with validation loss if needed
                 if isinstance(teacher_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     teacher_scheduler.step(avg_loss)
-                
+
                 best_acc = save_checkpoint_if_best(teacher_model, accuracy, best_acc, experiment_number)
-                
+
                 # Check early stopping for teacher
                 if teacher_early_stopping is not None:
                     metric = accuracy if teacher_early_stopping.mode == 'max' else avg_loss
                     if teacher_early_stopping(metric, teacher_model):
                         print(f"Early stopping triggered for teacher at epoch {epoch}")
                         break
-        
+
         # Step 2: Generate pseudo-labels for unlabeled data
         print("Generating pseudo-labels for unlabeled data...")
         pseudo_data, pseudo_targets = generate_pseudo_labels(
             teacher_model, unlabeled_loader, device, confidence_threshold
         )
-        
+
         if len(pseudo_data) == 0:
             print("Warning: No pseudo-labels generated. Skipping student training.")
             break
-        
+
         # Create pseudo-labeled dataset
         pseudo_dataset = PseudoLabeledDataset(pseudo_data, pseudo_targets)
         pseudo_loader = DataLoader(
@@ -634,12 +647,12 @@ def noisy_student_training_logic(config, config_wb):
             shuffle=True,
             pin_memory=True
         )
-        
+
         print(f"Generated {len(pseudo_data)} pseudo-labels")
-        
+
         # Step 3: Train student model on labeled + pseudo-labeled data with noise
         print("Training student model with noise...")
-        
+
         # Optionally use a larger model for student
         if student_larger and iteration == 0:
             # Try to get a larger variant (e.g., EfficientNet B1 instead of B0)
@@ -649,12 +662,12 @@ def noisy_student_training_logic(config, config_wb):
             student_model = get_model(student_model_name, student_config).to(device)
         else:
             student_model = get_model(config['model']['name'], config).to(device)
-        
+
         student_optimizer = get_optimizer(config, student_model.parameters())
         student_scheduler = get_lr_scheduler(config, student_optimizer)
-        
+
         student_epochs = config.get('noisy_student', {}).get('student_epochs', config['training']['epochs'])
-        
+
         # Initialize early stopping for student if enabled
         student_early_stopping = None
         if config.get('training', {}).get('early_stopping', {}).get('enabled', False):
@@ -662,32 +675,33 @@ def noisy_student_training_logic(config, config_wb):
             min_delta = config['training']['early_stopping'].get('min_delta', 0.0)
             mode = config['training']['early_stopping'].get('mode', 'max')
             restore_best = config['training']['early_stopping'].get('restore_best', True)
-            student_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode, restore_best=restore_best)
-        
+            student_early_stopping = EarlyStopping(patience=patience, min_delta=min_delta, mode=mode,
+                                                   restore_best=restore_best)
+
         for epoch in range(1, student_epochs + 1):
             train_loss = train_epoch_with_noise(
                 student_model, labeled_loader, pseudo_loader, loss_function,
                 student_optimizer, student_scheduler, scaler, device,
                 writer, epoch, config, lambda_u=lambda_u, drop_rate=drop_rate
             )
-            
+
             avg_loss, accuracy = evaluate_model(student_model, loss_function, test_loader, device, epoch, writer)
-            
+
             # Step ReduceLROnPlateau with validation loss if needed
             if isinstance(student_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 student_scheduler.step(avg_loss)
-            
+
             best_acc = save_checkpoint_if_best(student_model, accuracy, best_acc, experiment_number)
-            
+
             # Check early stopping for student
             if student_early_stopping is not None:
                 metric = accuracy if student_early_stopping.mode == 'max' else avg_loss
                 if student_early_stopping(metric, student_model):
                     print(f"Early stopping triggered for student at epoch {epoch}")
                     break
-        
+
         # Step 4: Student becomes teacher for next iteration
         teacher_model = student_model
         print(f"Iteration {iteration + 1} complete. Best accuracy so far: {best_acc:.2f}%")
-    
+
     finalize_training(writer, run)

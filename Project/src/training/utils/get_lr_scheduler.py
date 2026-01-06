@@ -62,9 +62,9 @@ def get_lr_scheduler(configs, optimizer):
     elif name == 'cosineannealingwarmrestarts' or name == 'cosinewarmrestarts':
         print('CosineAnnealingWarmRestarts Learning Rate Scheduler loaded!')
         return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                    T_0=configs["training"]["T_0"],
-                                                                    T_mult=configs["training"].get("T_mult", 1),
-                                                                    eta_min=configs["training"].get("eta_min", 0))
+                                                                    T_0=int(configs["training"]["T_0"]),
+                                                                    T_mult=int(configs["training"].get("T_mult", 1)),
+                                                                    eta_min=float(configs["training"].get("eta_min", 0)))
     else:
         print('The Learning Rate Scheduler name you have entered is not supported!')
         sys.exit()
