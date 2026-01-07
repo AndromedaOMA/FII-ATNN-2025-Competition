@@ -168,14 +168,14 @@ def preprocessing(config):
         # Training transforms with RandAugment (per-sample augmentation)
         train_transformer = v2.Compose([
             v2.ToImage(),
-            v2.Resize((224, 224), antialias=True),
+            v2.Resize((128, 128), antialias=True),
             v2.RandAugment(num_ops=randaugment_num_ops, magnitude=randaugment_magnitude),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean, std, inplace=True)
         ])
         test_transformer = v2.Compose([
             v2.ToImage(),
-            v2.Resize((224, 224), antialias=True),
+            v2.Resize((128, 128), antialias=True),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean, std, inplace=True)
         ])
