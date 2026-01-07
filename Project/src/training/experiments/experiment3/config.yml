@@ -75,13 +75,13 @@ sweep:
       values: [256]
 
     weight_decay:
-      values: [0, 0.0001, 0.001]
+      values: [0.0001]
 
     dropout:
-      values: [0.0, 0.1, 0.2]
+      values: [0.0]
 
     warmup_epochs:
-      values: [5, 10]
+      values: [5]
 
     optimizer:
       values: ["AdamW"]
