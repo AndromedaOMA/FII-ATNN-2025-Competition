@@ -13,14 +13,14 @@ dataset:
   std: [0.229, 0.224, 0.225]
 
 model:
-  name: "EfficientNetB0"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
+  name: "tf_efficientnet_b0_ns"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
   input_dim: 784         # Used only for MLP
   hidden_dim: 256
   num_classes: 100
   pretrained: True
 
 training:
-  epochs: 20
+  epochs: 30
   milestones: [60, 120, 160]
   learning_rate: 0.0001
   optimizer: "AdamW"  # SGD, Adam, AdamW, Muon, SAM
@@ -55,14 +55,6 @@ augmentation:
   randaugment_num_ops: 1  # Number of augmentation operations in RandAugment (typical: 2-3)
   randaugment_magnitude: 9  # Magnitude of RandAugment operations (typical: 5-15)
 
-noisy_student:
-  labeled_ratio: 0.1  # 10% labeled by default
-  num_iterations: 3  # Number of teacher-student iterations
-  lambda_u: 1.0  # Weight for unlabeled loss
-  drop_rate: 0.1  # Additional dropout noise
-  confidence_threshold: 0.0  # Minimum confidence to keep a pseudo-label (0.0 = keep all)
-  student_larger: false  # Use larger student model
-
 logging:
   checkpoint_dir: "./checkpoints"
   log_interval: 100
@@ -80,19 +72,31 @@ sweep:
       values: [1e-4]
 
     batch_size:
-      values: [128, 256]
+      values: [256]
 
     weight_decay:
       values: [0, 0.0001, 0.001]
 
     dropout:
-      values: [0.0, 0.1]
+      values: [0.0, 0.1, 0.2]
 
     warmup_epochs:
-      values: [5]
+      values: [5, 10]
 
     optimizer:
       values: ["AdamW"]
 
     training_logic:
-      values: ["baseline", "noisy_student"]
+      values: ["baseline"]
+
+    T_0:
+      values: [390, 781, 1562]  # Number of iterations for the first restart (~0.5, 1, 2 epochs for batch_size=256)
+
+    T_mult:
+      values: [1, 2]  # Factor that increases T_i after a restart
+
+    eta_min:
+      values: [1e-7, 1e-6, 1e-5]  # Minimum learning rate
+
+    randaugment_magnitude:
+      values: [5, 9, 13]  # Magnitude of RandAugment operations (typical: 5-15)

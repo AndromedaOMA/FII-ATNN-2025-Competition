@@ -32,6 +32,14 @@ def get_model(name, config):
         )
         print(f'Model efficientnet_b0 loaded with drop_rate={drop_rate}!')
         return model
+    elif name == 'efficientnet_b0_ns' or name == 'efficientnetb0_ns' or name == 'tf_efficientnet_b0_ns':
+        model = timm.create_model(
+            "tf_efficientnet_b0_ns", 
+            pretrained=config['model']['pretrained'],
+            num_classes=config['model']['num_classes']
+        )
+        print('Model tf_efficientnet_b0_ns (Noisy Student) loaded!')
+        return model
     elif name == 'MLP':
         pass
     else:

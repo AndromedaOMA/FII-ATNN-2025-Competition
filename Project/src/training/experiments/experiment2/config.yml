@@ -80,16 +80,16 @@ sweep:
       values: [1e-4]
 
     batch_size:
-      values: [128, 256]
+      values: [256]
 
     weight_decay:
       values: [0, 0.0001, 0.001]
 
     dropout:
-      values: [0.0, 0.1]
+      values: [0.0, 0.1, 0.2]
 
     warmup_epochs:
-      values: [5]
+      values: [5, 10]
 
     optimizer:
       values: ["AdamW"]
