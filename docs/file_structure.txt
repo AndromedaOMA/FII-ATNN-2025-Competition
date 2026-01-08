@@ -1,0 +1,48 @@
+project_name/
+│
+├── data/                          # All data-related directories and files
+│   ├── MNIST/                     # Original, immutable data dump
+│   ├── CIFAR10/                   # Original, immutable data dump
+│   ├── CIFAR100/                  # Original, immutable data dump
+│   └── OxfordIIITPet/             # Original, immutable data dump
+│
+├── docs/                          # Project documentation
+│   ├── tutorials                  # Step-by-step guides and tutorials
+│   ├── requirements.txt           # Python package requirements file
+│   └── file_structure.txt         # Project files structure
+│
+├── src/                           # Source code
+│   ├── data_pipeline/             # All modules related to the data pipeline
+│   │   └── preprocessing/         # Data preprocessing modules
+│   │       └── preprocessing.py   # Data preprocessing module
+│   │
+│   ├── models/                    # Neural network models and components
+│   │   ├── architectures/         # Different neural network architectures
+│   │   └── layers/                # Custom layers
+│   │
+│   └── training/
+│       ├── experiments/           # Specific experiment settings and results
+│       │   ├── experiment1/       # Each experiment can have its own subdirectory
+│       │   │   ├── config.yml     # Configuration file for the experiment
+│       │   │   └── results/       # Resulting plots, performance metrics, etc.
+│       │   ├── experiment2/
+│       │   └── ...
+│       │
+│       ├── scripts/               # Actual scripts to run training
+│       │   └── train_model.py     # Main training script
+│       │
+│       └── utils/                 # Miscellaneous utilities for training
+│           ├── weight_initialization.py # Weight initialization strategies
+│           ├── load_config.py     # Config loader
+│           ├── get_loss_function.py # Loss Function Getter
+│           ├── get_lr_scheduler.py # Learning Rate Scheduler Getter
+│           ├── get_model.py       # Model Getter
+│           ├── get_optimizer.py   # Optimizer Getter
+│           └── mixed_precision.py # Mixed precision training utilities
+│
+├── results/                       # Final results and outputs
+│   ├── models/                    # Trained models, weights, checkpoints
+│   ├── plots/                     # Resulting plots and visualizations
+│   └── tables/                    # Resulting tables, usually in CSV or Excel format
+│
+└── README.md                      # Overview and instructions for the project

@@ -1,0 +1,98 @@
+experiment:
+  number: 1
+  seed: 42
+  device: "cuda"
+  date_format: '%A_%d_%B_%Y_%Hh_%Mm_%Ss'
+
+dataset:
+  name: "CIFAR100-N"       # Options: MNIST, CIFAR10, CIFAR100, CIFAR100-N, OxfordIIITPet
+  batch_size: 256
+  num_workers: 4
+  data_dir: "../../../data/fii-atnn-2024-project-noisy-cifar-100"
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+model:
+  name: "EfficientNetB0"       # MLP, ResNet18, ResNet50, ResNest14d, ResNest26d
+  input_dim: 784         # Used only for MLP
+  hidden_dim: 256
+  num_classes: 100
+  pretrained: True
+
+training:
+  epochs: 20
+  milestones: [60, 120, 160]
+  learning_rate: 0.0001
+  optimizer: "AdamW"  # SGD, Adam, AdamW, Muon, SAM
+  momentum: 0.9
+  weight_decay: 5e-4
+  scheduler: "CosineAnnealingWarmRestarts"  # stepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
+  step_size: 10
+  gamma: 0.1
+  mode: "min"
+  verbose: True
+  factor: 0.3
+  patience: 3
+  threshold: 0.09
+  T_0: 781  # Number of iterations for the first restart (for CosineAnnealingWarmRestarts, ~1 epoch for CIFAR100 with batch_size=64)
+  T_mult: 2  # A factor increases T_i after a restart (for CosineAnnealingWarmRestarts)
+  eta_min: 1e-6  # Minimum learning rate (for CosineAnnealingWarmRestarts)
+  warmup_epochs: 5  # Number of epochs for learning rate warmup (linear warmup from warmup_initial_lr to learning_rate)
+  warmup_initial_lr: 0.0  # Initial learning rate for warmup (default: 0.0)
+  loss_function: "CrossEntropyLoss"
+  label_smoothing: 0.1  # Label smoothing factor (0.0 = no smoothing, typical values: 0.1-0.2)
+  resume: False
+  early_stopping:
+    enabled: True  # Enable early stopping
+    patience: 5  # Number of epochs to wait after last improvement before stopping
+    min_delta: 0.001  # Minimum change to qualify as an improvement (0.001 = 0.1% for accuracy)
+    mode: "max"  # "max" for metrics to maximize (e.g., accuracy), "min" for metrics to minimize (e.g., loss)
+    restore_best: True  # Whether to restore the best model state when stopping
+
+augmentation:
+  cutmix_alpha: 0.5  # CutMix alpha parameter (0.0 = disabled, typical: 0.5-1.0)
+  mixup_alpha: 0.5  # MixUp alpha parameter (0.0 = disabled, typical: 0.5-1.0)
+  randaugment_num_ops: 1  # Number of augmentation operations in RandAugment (typical: 2-3)
+  randaugment_magnitude: 9  # Magnitude of RandAugment operations (typical: 5-15)
+
+noisy_student:
+  labeled_ratio: 0.1  # 10% labeled by default
+  num_iterations: 3  # Number of teacher-student iterations
+  lambda_u: 1.0  # Weight for unlabeled loss
+  drop_rate: 0.1  # Additional dropout noise
+  confidence_threshold: 0.0  # Minimum confidence to keep a pseudo-label (0.0 = keep all)
+  student_larger: false  # Use larger student model
+
+logging:
+  checkpoint_dir: "./checkpoints"
+  log_interval: 100
+  checkpoint: true
+  save_epoch: 10
+
+sweep:
+  method: grid
+  metric:
+    name: val_acc
+    goal: maximize
+
+  parameters:
+    learning_rate:
+      values: [1e-4]
+
+    batch_size:
+      values: [256]
+
+    weight_decay:
+      values: [0, 0.0001, 0.001]
+
+    dropout:
+      values: [0.0, 0.1, 0.2]
+
+    warmup_epochs:
+      values: [5, 10]
+
+    optimizer:
+      values: ["AdamW"]
+
+    training_logic:
+      values: ["baseline", "noisy_student"]
